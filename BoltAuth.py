@@ -11,10 +11,10 @@
 import subprocess
 import sys
 
-
+# List of required libraries
 required_libraries = ['requests', 're', 'os', 'threading', 'queue']
 
-
+# Function to install missing libraries
 def install_missing_libraries(libraries):
     for library in libraries:
         try:
@@ -23,15 +23,16 @@ def install_missing_libraries(libraries):
             print(f"'{library}' module not found. Installing it now...")
             subprocess.check_call([sys.executable, "-m", "pip", "install", library])
 
-
+# Install missing libraries
 install_missing_libraries(required_libraries)
 
-
+# After this, all required libraries should be available for use
 import threading
 import queue
 import requests
 import re
 import os
+import time
 
 def extract_values(page_source):
     sfttag = re.search(r'sFTTag:\'<input type="hidden" name="PPFT" id="i0327" value="(.+?)"/>', page_source)
@@ -147,18 +148,33 @@ def get_minecraft_bearer_token(user_hash, xsts_token):
 script_directory = os.path.dirname(os.path.abspath(__file__))
 accounts_file_path = os.path.join(script_directory, 'accounts.txt')
 
+
+
 def load_accounts(filename):
     accounts = []
-    try:
-        with open(filename, 'r') as file:
-            for line in file:
-                if ':' in line:
-                    email, password = line.strip().split(':', 1)
-                    accounts.append((email, password))
-    except FileNotFoundError:
-        print(f"File {filename} not found.")
+    script_directory = os.path.dirname(os.path.abspath(__file__))
+    file_path = os.path.join(script_directory, filename)
+    
+    if not os.path.exists(file_path):
+        print(f"File {filename} not found. Creating a new one...")
+        with open(file_path, 'w') as file:
+            file.write("email:password\n")
+
+        print(f"A new {filename} file has been created. Please add accounts in the format 'email:password'.")
+    else:
+        try:
+            with open(file_path, 'r') as file:
+                for line in file:
+                    if ':' in line and not line.startswith("#"):
+                        email, password = line.strip().split(':', 1)
+                        accounts.append((email, password))
+        except Exception as e:
+            print(f"An error occurred while loading accounts: {e}")
     
     return accounts
+
+
+
 
 def process_account_in_thread(email, password, result_queue):
     access_token = microsoft_login(email, password)
@@ -179,21 +195,21 @@ def process_account_in_thread(email, password, result_queue):
             print(f"[Failed] Could not authenticate {email} due to Xbox Live authentication error.")
     else:
         print(f"[Failed] Could not authenticate {email} due to invalid credentials.")
+    
 
-def process_accounts_with_threads(filename):
+
+
+def process_accounts_sequentially(filename):
     accounts = load_accounts(filename)
     successful_count = 0
     result_queue = queue.Queue()
 
-    threads = []
     for email, password in accounts:
-        thread = threading.Thread(target=process_account_in_thread, args=(email, password, result_queue))
-        threads.append(thread)
-        thread.start()
-
-    for thread in threads:
-        thread.join()
-
+        process_account_in_thread(email, password, result_queue)
+        
+        # Sleep for 20 ish secounds. dont know if this is ok, i only tested with 30 accounts.
+        print(f"[Info] Sleeping for 20 seconds before processing the next account...")
+        time.sleep(20)
 
     tokens = []
     while not result_queue.empty():
@@ -202,17 +218,17 @@ def process_accounts_with_threads(filename):
     successful_count = len(tokens)
     return successful_count, tokens
 
-
+# Save valid accounts and their Bearer tokens to a file
 def save_valid_accounts(tokens, filename='valid_accounts.txt'):
     try:
-
+        # Get the absolute path of the script's directory
         script_directory = os.path.dirname(os.path.abspath(__file__))
         
-
+        # Combine the script's directory with the filename to get the full path
         file_path = os.path.join(script_directory, filename)
         
      
- 
+        # Open the file and write the tokens
         with open(file_path, 'a') as file:
             for token in tokens:
                 file.write(f"{token}\n")  
@@ -220,13 +236,15 @@ def save_valid_accounts(tokens, filename='valid_accounts.txt'):
     except Exception as e:
         print(f"Error saving tokens: {e}")
 
+
 def main():
-    filename = accounts_file_path 
-    successful_count, tokens = process_accounts_with_threads(filename)
+    filename = accounts_file_path  
+    successful_count, tokens = process_accounts_sequentially(filename)
 
     if successful_count > 0:
         print(f"Successfully processed {successful_count} account(s).")
         
+        # Save the tokens to valid_accounts.txt
         save_valid_accounts(tokens, filename='valid_accounts.txt')
     else:
         print("No successful logins.")
