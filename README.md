@@ -2,6 +2,19 @@
 BoltAuth is a tool to retrieve bearer tokens faster, when having multiple accounts.
 
 # How do use it?
-You download the python code, then insert your accounts into the **accounts.txt**
-Next step is to run the program, if you dont have the libraries installed that is required for the script, it will install them automatically.
-Then, when all accounts has been checked. You can go into **valid_accounts.txt**, copy everything then paste it into the dashboard Accounts section.
+1. Download the tool.
+2. Insert your accounts into **accounts.txt**.
+3. Run the program, and wait for all accounts to be checked.
+4. Open **valid_accounts.txt** copy everything.
+5. Go into the dashboard under **Accounts**, add accounts and just paste everything in.
+
+And then you're set!
+
+
+# NameChange Allowed
+Make sure the accounts you use can namechange, otherwise you wont be able to insert them into your accounts list in the dashboard
+
+
+
+Any **questions** feel free to join the discord 
+**[BoltSniper Discord](https://discord.gg/boltsniper)**
