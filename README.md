@@ -14,9 +14,13 @@ And then you're set!
 # NameChange Allowed
 Make sure the accounts you use can namechange, otherwise you wont be able to insert them into your accounts list in the dashboard
 
+
+
 # TODO LIST
 - Add verification for NameChange
 
 
+
+# Discord & Support
 Any **questions** feel free to join the discord 
 **[BoltSniper Discord](https://discord.gg/boltsniper)**
