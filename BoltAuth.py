@@ -1,10 +1,20 @@
+# BoltAuth.py is a tool created by Bolt to be used by everybody.
+# This tool is also created to help Bolt Users to exctract their bearer token faster, when having multiple accounts.
+# If any issues comes up, feel free to open a ticket on discord or message Bolt.
+
+
+# This tool is using public API for extracting the Bearer Token.
+
+
+
+
 import subprocess
 import sys
 
-# List of required libraries
+
 required_libraries = ['requests', 're', 'os', 'threading', 'queue']
 
-# Function to install missing libraries
+
 def install_missing_libraries(libraries):
     for library in libraries:
         try:
@@ -13,10 +23,10 @@ def install_missing_libraries(libraries):
             print(f"'{library}' module not found. Installing it now...")
             subprocess.check_call([sys.executable, "-m", "pip", "install", library])
 
-# Install missing libraries
+
 install_missing_libraries(required_libraries)
 
-# After this, all required libraries should be available for use
+
 import threading
 import queue
 import requests
@@ -192,33 +202,32 @@ def process_accounts_with_threads(filename):
     successful_count = len(tokens)
     return successful_count, tokens
 
-# Save valid accounts and their Bearer tokens to a file
+
 def save_valid_accounts(tokens, filename='valid_accounts.txt'):
     try:
-        # Get the absolute path of the script's directory
+
         script_directory = os.path.dirname(os.path.abspath(__file__))
         
-        # Combine the script's directory with the filename to get the full path
+
         file_path = os.path.join(script_directory, filename)
         
      
-        # Open the file and write the tokens
+ 
         with open(file_path, 'a') as file:
             for token in tokens:
-                file.write(f"{token}\n")  # Write each token on a new line
+                file.write(f"{token}\n")  
         print("Tokens saved successfully.")
     except Exception as e:
         print(f"Error saving tokens: {e}")
 
 def main():
-    filename = accounts_file_path  # This points to accounts.txt
+    filename = accounts_file_path 
     successful_count, tokens = process_accounts_with_threads(filename)
 
     if successful_count > 0:
         print(f"Successfully processed {successful_count} account(s).")
         
-        # Now save the tokens to the correct file: valid_accounts.txt
-        save_valid_accounts(tokens, filename='valid_accounts.txt')  # Ensure valid_accounts.txt is used
+        save_valid_accounts(tokens, filename='valid_accounts.txt')
     else:
         print("No successful logins.")
     
