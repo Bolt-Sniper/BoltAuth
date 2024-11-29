@@ -208,8 +208,8 @@ def process_accounts_sequentially(filename):
         process_account_in_thread(email, password, result_queue)
         
         # Sleep for 20 ish secounds. dont know if this is ok, i only tested with 30 accounts.
-        print(f"[Info] Sleeping for 20 seconds before processing the next account...")
-        time.sleep(20)
+        print(f"[Info] Sleeping for 5 seconds before processing the next account...")
+        time.sleep(5)
 
     tokens = []
     while not result_queue.empty():
