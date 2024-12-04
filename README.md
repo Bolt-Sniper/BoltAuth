@@ -22,7 +22,7 @@ Also added a config.json to mess around with the few settings there is.
 Make sure you open the config.json and choose your proxy type. If the proxies needs Authentication, make sure to put that in as well and set the "needAuth" to true.
 locked_accounts doesnt mean the accounts are locked, but doesnt work or has 2FA. Could also be locked.
 
-# 📄 Config
+# 📄 BEST CONFIG W/O PROXIES
 ```
 {
     "proxy": {
