@@ -6,6 +6,10 @@
         "password": "" 
     },
     
+    "authNoProxy": {
+        "authDelay": 20
+    },
+    
     "authentication": {
         "threadCount": 10, 
         "allowRetry": true, 
