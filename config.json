@@ -1,14 +1,16 @@
 {
     "proxy": {
+        "enabled": false,
         "type": "SOCKS5", 
         "needsAuth": false,
         "username": "",
         "password": "" 
     },
-    
+
     "authNoProxy": {
-        "authDelay": 20
+        "authDelay": 5
     },
+    
     
     "authentication": {
         "threadCount": 10, 
