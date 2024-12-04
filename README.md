@@ -25,3 +25,27 @@ locked_accounts doesnt mean the accounts are locked, but doesnt work or has 2FA.
 
 # 🔰 Need help with something?
 Join the discord here [Boltsniper Discord](discord.gg/boltsniper)
+
+
+
+# Config
+```{
+    "proxy": {
+        "enabled": false,
+        "type": "SOCKS5", 
+        "needsAuth": false,
+        "username": "",
+        "password": "" 
+    },
+
+    "authNoProxy": {
+        "authDelay": 5
+    },
+    
+    
+    "authentication": {
+        "threadCount": 10, 
+        "allowRetry": true, 
+        "retryCount": 3 
+    }
+}```
