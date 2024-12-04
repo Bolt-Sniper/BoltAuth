@@ -1,0 +1,14 @@
+{
+    "proxy": {
+        "type": "SOCKS5", 
+        "needsAuth": false,
+        "username": "",
+        "password": "" 
+    },
+    
+    "authentication": {
+        "threadCount": 10, 
+        "allowRetry": true, 
+        "retryCount": 3 
+    }
+}
