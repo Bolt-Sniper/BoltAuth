@@ -44,8 +44,9 @@ locked_accounts doesnt mean the accounts are locked, but doesnt work or has 2FA.
         "retryCount": 3 
     }
 }
+```
 
-# 🔰 Need help with something?
+# 🔰 Need help? Join our discord.
 Join the discord here [Boltsniper Discord](discord.gg/boltsniper)
 
 
