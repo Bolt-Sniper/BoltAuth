@@ -42,7 +42,7 @@ locked_accounts doesnt mean the accounts are locked, but doesnt work or has 2FA.
         "allowRetry": true, 
         "retryCount": 3 
     }
-}```
+}
 
 # 🔰 Need help with something?
 Join the discord here [Boltsniper Discord](discord.gg/boltsniper)
