@@ -2,11 +2,7 @@
 # This tool is also created to help Bolt Users to exctract their bearer token faster, when having multiple accounts.
 # If any issues comes up, feel free to open a ticket on discord or message Bolt.
 
-
 # This tool is using public API for extracting the Bearer Token.
-
-
-
 
 import subprocess
 import sys
@@ -32,41 +28,14 @@ BOLTAUTH_ASCII = f"""{Fore.CYAN}
 ╚═════╝  ╚═════╝ ╚══════╝╚═╝   ╚═╝  ╚═╝ ╚═════╝    ╚═╝   ╚═╝  ╚═╝
 {Style.RESET_ALL}"""
 
-class StatusCounter:
-    def __init__(self):
-        self.success = 0
-        self.failed = 0
-        self.twofa = 0
-        self.lock = threading.Lock()
-        self.last_update = 0
-        self.first_print = True
-        
-    def update(self, status):
-        with self.lock:
-            if status == "SUCCESS":
-                self.success += 1
-            elif status == "2FA":
-                self.twofa += 1
-            else:
-                self.failed += 1
-            self._display_status()
-    
-    def _display_status(self):
-        # Only update every 0.1 seconds to prevent screen flicker
-        current_time = time.time()
-        if current_time - self.last_update < 0.1:
-            return
-        self.last_update = current_time
-        
-        # Move cursor up and clear line if not first print
-        if not self.first_print:
-            sys.stdout.write('\033[F')  # Move up one line
-        else:
-            self.first_print = False
-            
-        sys.stdout.write('\033[K')  # Clear line
-        print(f"{Fore.GREEN}[SUCCESS] > {self.success}   {Fore.RED}[FAILED] > {self.failed}   {Fore.YELLOW}[2FA] > {self.twofa}{Style.RESET_ALL}")
-        sys.stdout.flush()
+import datetime
+
+def get_timestamp():
+    return datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
+
+def log(message, color=Fore.CYAN):
+    timestamp = get_timestamp()
+    print(f"{Style.DIM}[{timestamp}]{Style.RESET_ALL} {color}{message}{Style.RESET_ALL}\n")
 
 def clear_screen():
     os.system('cls' if os.name == 'nt' else 'clear')
@@ -77,29 +46,8 @@ def display_header():
     print(f"{Fore.CYAN}BoltAuth - A tool to retrieve your bearer tokens from your minecraft account.{Style.RESET_ALL}")
     print("\n")  # Add some spacing
 
-# List of required libraries
-required_libraries = ['requests', 're', 'os', 'threading', 'queue', 'requests[socks]', 'colorama', 'json']
-
-# Function to install missing libraries
-def install_missing_libraries(libraries):
-    for library in libraries:
-        try:
-            __import__(library)
-        except ImportError:
-            print(f"'{library}' module not found. Installing it now...")
-            subprocess.check_call([sys.executable, "-m", "pip", "install", library])
-
-# Install missing libraries
-install_missing_libraries(required_libraries)
-
-# After this, all required libraries should be available for use
-import threading
-import queue
-import requests
-import re
-import os
-import time
-import json
+def create_session():
+    return requests.Session()
 
 def extract_values(page_source):
     sfttag = re.search(r'sFTTag:\'<input type="hidden" name="PPFT" id="i0327" value="(.+?)"/>', page_source)
@@ -110,370 +58,296 @@ def extract_values(page_source):
     
     return sfttag.group(1), url_post.group(1)
 
-class ProxyManager:
-    def __init__(self, config):
-        self.proxies = []
-        self.current_index = 0
-        self.lock = threading.Lock()
-        self.config = config
-        self.load_proxies()
-
-    def load_proxies(self):
-        script_directory = os.path.dirname(os.path.abspath(__file__))
-        proxies_file = os.path.join(script_directory, 'proxies.txt')
-        
-        if not os.path.exists(proxies_file):
-            print("Creating proxies.txt file...")
-            with open(proxies_file, 'w') as f:
-                f.write("# Add your proxies here in format: ip:port\n")
-            return
-
-        try:
-            with open(proxies_file, 'r') as f:
-                self.proxies = [line.strip() for line in f if line.strip() and not line.startswith('#')]
-            if self.proxies:
-                print(f"Loaded {len(self.proxies)} proxies")
-            else:
-                print("No proxies found in proxies.txt")
-        except Exception as e:
-            print(f"Error loading proxies: {e}")
-
-    def get_next_proxy(self):
-        if not self.proxies:
-            return None
-            
-        with self.lock:
-            proxy = self.proxies[self.current_index]
-            self.current_index = (self.current_index + 1) % len(self.proxies)
-            
-            # Format proxy based on config
-            proxy_type = self.config['proxy']['type'].lower()
-            if self.config['proxy']['needsAuth']:
-                auth = f"{self.config['proxy']['username']}:{self.config['proxy']['password']}@"
-            else:
-                auth = ""
-                
-            return {
-                'http': f"{proxy_type}://{auth}{proxy}",
-                'https': f"{proxy_type}://{auth}{proxy}"
-            }
-
-def create_session(proxy=None):
-    session = requests.Session()
-    if proxy:
-        session.proxies.update(proxy)
-    return session
-
-def microsoft_login(email, password, proxy=None):
-    initial_url = "https://login.live.com/oauth20_authorize.srf?client_id=000000004C12AE6F&redirect_uri=https://login.live.com/oauth20_desktop.srf&scope=service::user.auth.xboxlive.com::MBI_SSL&display=touch&response_type=token&locale=en"
-    
-    session = create_session(proxy)
+def microsoft_login(email, password):
     try:
+        session = create_session()
+        log(f"\nAttempting login for: {email}")
+        
+        initial_url = "https://login.live.com/oauth20_authorize.srf?client_id=000000004C12AE6F&redirect_uri=https://login.live.com/oauth20_desktop.srf&scope=service::user.auth.xboxlive.com::MBI_SSL&display=touch&response_type=token&locale=en"
         response = session.get(initial_url)
+        
         sfttag_value, url_post_value = extract_values(response.text)
-
-        login_url = url_post_value
+        
         login_data = {
             'login': email,
             'loginfmt': email,
             'passwd': password,
             'PPFT': sfttag_value
         }
-
+        
         headers = {'Content-Type': 'application/x-www-form-urlencoded'}
-        login_request = session.post(login_url, data=login_data, headers=headers)
-
+        login_request = session.post(url_post_value, data=login_data, headers=headers)
+        
         if "accessToken" in login_request.url or login_request.url == url_post_value:
+            log(f"Login failed for: {email}", Fore.RED)
             return None
         
         raw_login_data = login_request.url.split("#")[1]
         login_data = dict(item.split("=") for item in raw_login_data.split("&"))
         access_token = requests.utils.unquote(login_data["access_token"])
-
+        
         return access_token
-    except requests.exceptions.RequestException as e:
+            
+    except Exception as e:
+        log(f"Error during login: {str(e)}", Fore.RED)
         return None
 
-def xbox_live_authenticate(access_token, proxy=None):
-    url = "https://user.auth.xboxlive.com/user/authenticate"
-    headers = {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json'
-    }
-
-    body = {
-        "Properties": {
-            "AuthMethod": "RPS",
-            "SiteName": "user.auth.xboxlive.com",
-            "RpsTicket": access_token
-        },
-        "RelyingParty": "http://auth.xboxlive.com",
-        "TokenType": "JWT"
-    }
-
+def xbox_live_authenticate(access_token):
     try:
-        session = create_session(proxy)
-        response = session.post(url, json=body, headers=headers)
+        session = create_session()
+        
+        headers = {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
+        }
+        
+        body = {
+            "Properties": {
+                "AuthMethod": "RPS",
+                "SiteName": "user.auth.xboxlive.com",
+                "RpsTicket": access_token
+            },
+            "RelyingParty": "http://auth.xboxlive.com",
+            "TokenType": "JWT"
+        }
+        
+        response = session.post('https://user.auth.xboxlive.com/user/authenticate', 
+                              json=body, headers=headers)
         
         if response.status_code == 200:
             token = response.json()["Token"]
             user_hash = response.json()["DisplayClaims"]["xui"][0]["uhs"]
-            return token, user_hash  
+            return token, user_hash
         else:
+            log(f"Failed to authenticate with Xbox Live. Status: {response.status_code}", Fore.RED)
             return None, None
-    except requests.exceptions.RequestException as e:
+            
+    except Exception as e:
+        log(f"Error during Xbox authentication: {str(e)}", Fore.RED)
         return None, None
 
-def get_xsts_token(xbox_token, proxy=None):
-    url = "https://xsts.auth.xboxlive.com/xsts/authorize"
-    headers = {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json'
-    }
-
-    body = {
-        "Properties": {
-            "SandboxId": "RETAIL",
-            "UserTokens": [xbox_token]
-        },
-        "RelyingParty": "rp://api.minecraftservices.com/",
-        "TokenType": "JWT"
-    }
-
+def get_xsts_token(xbox_token):
     try:
-        session = create_session(proxy)
-        response = session.post(url, json=body, headers=headers)
+        session = create_session()
+        
+        headers = {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
+        }
+        
+        body = {
+            "Properties": {
+                "SandboxId": "RETAIL",
+                "UserTokens": [xbox_token]
+            },
+            "RelyingParty": "rp://api.minecraftservices.com/",
+            "TokenType": "JWT"
+        }
+        
+        response = session.post('https://xsts.auth.xboxlive.com/xsts/authorize', 
+                              json=body, headers=headers)
         
         if response.status_code == 200:
             xsts_token = response.json()["Token"]
+            log("Successfully obtained XSTS token")
             return xsts_token
+        elif response.status_code == 401:
+            log("XSTS token retrieval failed with 401 status", Fore.RED)
+            return "401"
         else:
+            log(f"Failed to obtain XSTS token. Status: {response.status_code}", Fore.RED)
             return None
-    except requests.exceptions.RequestException as e:
+            
+    except Exception as e:
+        log(f"Error during XSTS token retrieval: {str(e)}", Fore.RED)
         return None
 
-def get_minecraft_bearer_token(user_hash, xsts_token, proxy=None):
-    url = "https://api.minecraftservices.com/authentication/login_with_xbox"
-    headers = {
-        'Content-Type': 'application/json'
-    }
-
-    body = {
-        "identityToken": f"XBL3.0 x={user_hash};{xsts_token}",
-        "ensureLegacyEnabled": True
-    }
-
+def get_minecraft_bearer_token(user_hash, xsts_token):
     try:
-        session = create_session(proxy)
-        response = session.post(url, json=body, headers=headers)
+        session = create_session()
+        
+        headers = {
+            'Content-Type': 'application/json'
+        }
+        
+        body = {
+            "identityToken": f"XBL3.0 x={user_hash};{xsts_token}",
+            "ensureLegacyEnabled": True
+        }
+        
+        response = session.post('https://api.minecraftservices.com/authentication/login_with_xbox', 
+                              json=body, headers=headers)
         
         if response.status_code == 200:
             bearer_token = response.json()["access_token"]
             return bearer_token
         else:
-            return None
-    except requests.exceptions.RequestException as e:
-        return None
-
-script_directory = os.path.dirname(os.path.abspath(__file__))
-accounts_file_path = os.path.join(script_directory, 'accounts.txt')
-
-def load_accounts(filename):
-    accounts = []
-    script_directory = os.path.dirname(os.path.abspath(__file__))
-    file_path = os.path.join(script_directory, filename)
-    
-    if not os.path.exists(file_path):
-        print(f"File {filename} not found. Creating a new one...")
-        with open(file_path, 'w') as file:
-            file.write("email:password\n")
-
-        print(f"A new {filename} file has been created. Please add accounts in the format 'email:password'.")
-    else:
-        try:
-            with open(file_path, 'r') as file:
-                for line in file:
-                    if ':' in line and not line.startswith("#"):
-                        email, password = line.strip().split(':', 1)
-                        accounts.append((email, password))
-        except Exception as e:
-            print(f"An error occurred while loading accounts: {e}")
-    
-    return accounts
-
-def save_locked_accounts(email, password, filename='locked_accounts.txt'):
-    try:
-        script_directory = os.path.dirname(os.path.abspath(__file__))
-        file_path = os.path.join(script_directory, filename)
-        
-        with open(file_path, 'a') as file:
-            file.write(f"{email}:{password}\n")
-    except Exception as e:
-        print(f"Error saving locked account: {e}")
-
-def update_accounts_file(valid_accounts, filename='accounts.txt'):
-    try:
-        script_directory = os.path.dirname(os.path.abspath(__file__))
-        file_path = os.path.join(script_directory, filename)
-        
-        with open(file_path, 'w') as file:
-            file.write("email:password\n")  # Keep the header
-            for email, password in valid_accounts:
-                file.write(f"{email}:{password}\n")
-        
-        print(f"Updated {filename} - Removed invalid accounts")
-    except Exception as e:
-        print(f"Error updating accounts file: {e}")
-
-def load_config():
-    try:
-        script_directory = os.path.dirname(os.path.abspath(__file__))
-        config_path = os.path.join(script_directory, 'config.json')
-        
-        if not os.path.exists(config_path):
-            print(f"{Fore.RED}[ERROR] config.json not found!{Style.RESET_ALL}")
+            log(f"Failed to obtain Minecraft bearer token. Status: {response.status_code}", Fore.RED)
             return None
             
-        with open(config_path, 'r') as f:
-            # Filter out lines starting with #
-            config_lines = [line for line in f if not line.strip().startswith('"#')]
-            config_str = ''.join(config_lines)
-            return json.loads(config_str)
     except Exception as e:
-        print(f"{Fore.RED}[ERROR] Failed to load config.json: {str(e)}{Style.RESET_ALL}")
+        log(f"Error during bearer token retrieval: {str(e)}", Fore.RED)
         return None
 
-def process_accounts_with_workers(filename, config):
-    accounts = load_accounts(filename)
-    if not accounts:
-        print("No accounts found to process.")
-        return [], []
-
-    result_queue = queue.Queue()
-    account_queue = queue.Queue()
-    valid_accounts = []
-    proxy_manager = ProxyManager(config) if config['proxy']['enabled'] else None
-    status_counter = StatusCounter()
-    
-    # Fill account queue
-    for account in accounts:
-        account_queue.put((account, 0))  # (account, retry_count)
-    
-    def worker():
-        while True:
-            try:
-                try:
-                    (email, password), retries = account_queue.get(timeout=1)
-                except queue.Empty:
-                    break
-                
-                # Handle proxy based on config
-                proxy = None
-                if config['proxy']['enabled']:
-                    proxy = proxy_manager.get_next_proxy() if proxy_manager.proxies else None
-                
-                access_token = microsoft_login(email, password, proxy)
-                if access_token:
-                    xbox_token, user_hash = xbox_live_authenticate(access_token, proxy)
-                    if xbox_token:
-                        xsts_token = get_xsts_token(xbox_token, proxy)
-                        if xsts_token:
-                            minecraft_token = get_minecraft_bearer_token(user_hash, xsts_token, proxy)
-                            if minecraft_token:
-                                status_counter.update("SUCCESS")
-                                result_queue.put(f"{email.strip()}:{minecraft_token.strip()}")
-                                valid_accounts.append((email, password))
-                                account_queue.task_done()
-                                continue
-                
-                # Handle retries based on config
-                if config['authentication']['allowRetry'] and retries < config['authentication']['retryCount']:
-                    account_queue.put(((email, password), retries + 1))
-                else:
-                    # Only count as failed after all retries are exhausted
-                    status_counter.update("FAILED")
-                    save_locked_accounts(email, password)
-                
-                account_queue.task_done()
-                
-                # Add delay if not using proxies
-                if not config['proxy']['enabled']:
-                    time.sleep(config['authNoProxy']['authDelay'])
-                else:
-                    time.sleep(5)  # Default proxy delay
-                
-            except Exception as e:
-                if 'email' in locals():
-                    # Only count as failed if we're out of retries
-                    if not config['authentication']['allowRetry'] or retries >= config['authentication']['retryCount']:
-                        status_counter.update("FAILED")
-                    save_locked_accounts(email, password)
-                account_queue.task_done()
-
-    # Adjust thread count based on proxy usage
-    max_threads = config['authentication']['threadCount']
-    if not config['proxy']['enabled']:
-        # Limit threads when not using proxies to prevent rate limiting
-        max_threads = min(max_threads, 3)
-        print(f"{Fore.YELLOW}Running with limited threads ({max_threads}) due to no proxy usage{Style.RESET_ALL}")
-    
-    thread_count = min(max_threads, len(accounts))
-    threads = []
-    for _ in range(thread_count):
-        thread = threading.Thread(target=worker)
-        thread.daemon = True
-        thread.start()
-        threads.append(thread)
-    
-    account_queue.join()
-    
-    for thread in threads:
-        thread.join()
-    
-    valid_tokens = []
-    while not result_queue.empty():
-        valid_tokens.append(result_queue.get())
-    
-    return valid_tokens, valid_accounts
-
-def save_valid_accounts(tokens, filename='valid_accounts.txt'):
+def load_accounts(filename='ACCOUNTS.txt'):
     try:
-        # Get the absolute path of the script's directory
-        script_directory = os.path.dirname(os.path.abspath(__file__))
-        
-        # Combine the script's directory with the filename to get the full path
-        file_path = os.path.join(script_directory, filename)
-        
-     
-        # Open the file and write the tokens
-        with open(file_path, 'a') as file:
-            for token in tokens:
-                file.write(f"{token}\n")  
-        print("Tokens saved successfully.")
+        with open(filename, 'r') as f:
+            accounts = []
+            for line in f:
+                if ':' in line:
+                    email, password = line.strip().split(':', 1)
+                    accounts.append((email, password))
+        return accounts
     except Exception as e:
-        print(f"Error saving tokens: {e}")
+        log(f"Error loading accounts: {str(e)}", Fore.RED)
+        return []
+
+def save_failed_account(email, password, filename='NON_WORKINGACCOUNTS.txt'):
+    try:
+        with open(filename, 'a') as f:
+            f.write(f"{email}:{password}\n")
+    except Exception as e:
+        log(f"Error saving failed account: {str(e)}", Fore.RED)
+
+def save_bearer_token(email, token, filename='TOKENS.txt'):
+    try:
+        with open(filename, 'a') as f:
+            f.write(f"{email}:{token}\n")
+    except Exception as e:
+        log(f"Error saving bearer token: {str(e)}", Fore.RED)
+
+class StatusCounter:
+    def __init__(self):
+        self.success = 0
+        self.failed = 0
+        self.lock = threading.Lock()
+        
+    def update(self, status):
+        with self.lock:
+            if status == "SUCCESS":
+                self.success += 1
+            else:
+                self.failed += 1
+
+class ProcessingManager:
+    def __init__(self):
+        self.processed_count = 0
+        self.lock = threading.Lock()
+        self.batch_size = 1
+        self.sleep_time = 20
+
+    def should_sleep(self):
+        with self.lock:
+            self.processed_count += 1
+            if self.processed_count % self.batch_size == 0:
+                log(f"Processed {self.batch_size} account. Sleeping for {self.sleep_time} seconds...", Fore.YELLOW)
+                time.sleep(self.sleep_time)
+                return True
+        return False
+
+def process_account(email, password, status_counter):
+    log(f"\nProcessing account: {email}")
+    
+    # Try to get access token
+    access_token = microsoft_login(email, password)
+    if not access_token:
+        with open('[FAILED]Accounts.txt', 'a') as f:
+            f.write(f"{email}:{password}\n")
+        status_counter.update("FAILED")
+        return False
+        
+    # Try to get Xbox token
+    xbox_token, user_hash = xbox_live_authenticate(access_token)
+    if not xbox_token:
+        if "401" in str(xbox_token):
+            with open('[SUSPENDED]Accounts.txt', 'a') as f:
+                f.write(f"{email}:{password}\n")
+        else:
+            with open('[FAILED]Accounts.txt', 'a') as f:
+                f.write(f"{email}:{password}\n")
+        status_counter.update("FAILED")
+        return False
+        
+    # Try to get XSTS token
+    xsts_token = get_xsts_token(xbox_token)
+    if xsts_token == "401":
+        with open('[SUSPENDED]Accounts.txt', 'a') as f:
+            f.write(f"{email}:{password}\n")
+        status_counter.update("FAILED")
+        return False
+    elif not xsts_token:
+        with open('[FAILED]Accounts.txt', 'a') as f:
+            f.write(f"{email}:{password}\n")
+        status_counter.update("FAILED")
+        return False
+        
+    # Try to get bearer token
+    bearer_token = get_minecraft_bearer_token(user_hash, xsts_token)
+    if not bearer_token:
+        with open('[FAILED]Accounts.txt', 'a') as f:
+            f.write(f"{email}:{password}\n")
+        status_counter.update("FAILED")
+        return False
+        
+    # Save successful bearer token
+    save_bearer_token(email, bearer_token)
+    with open('[SUCCESS]Accounts.txt', 'a') as f:
+        f.write(f"{email}:{password}\n")
+    log(f"\nSuccessfully processed: {email}", Fore.GREEN)
+    status_counter.update("SUCCESS")
+    return True
+
+def worker(account_queue, status_counter, processing_manager):
+    while True:
+        try:
+            email, password = account_queue.get_nowait()
+        except queue.Empty:
+            break
+            
+        process_account(email, password, status_counter)
+        processing_manager.should_sleep()
+        account_queue.task_done()
 
 def main():
     display_header()
     
-    # Load configuration
-    config = load_config()
-    if not config:
-        print(f"{Fore.RED}Please ensure config.json is properly configured.{Style.RESET_ALL}")
-        input("\nPress enter to exit...")
+    # Create required files if they don't exist
+    for file in ['ACCOUNTS.txt', 'TOKENS.txt', 'NON_WORKINGACCOUNTS.txt']:
+        if not os.path.exists(file):
+            open(file, 'a').close()
+    
+    accounts = load_accounts()
+    if not accounts:
+        log("No accounts found in ACCOUNTS.txt", Fore.RED)
         return
         
-    filename = accounts_file_path
-    valid_tokens, valid_accounts = process_accounts_with_workers(filename, config)
-
-    print("\n\nProcess completed!")
-    if valid_tokens:
-        print(f"\n{Fore.GREEN}Successfully processed {len(valid_tokens)} account(s).{Style.RESET_ALL}")
-        save_valid_accounts(valid_tokens, filename='valid_accounts.txt')
-        update_accounts_file(valid_accounts)
+    log(f"Loaded {len(accounts)} accounts")
     
-    print("\nPress enter to exit...")
-    input()
+    # Initialize counters and managers
+    status_counter = StatusCounter()
+    processing_manager = ProcessingManager()
+    
+    # Create account queue
+    account_queue = queue.Queue()
+    for account in accounts:
+        account_queue.put(account)
+    
+    # Create and start worker threads
+    threads = []
+    for _ in range(1):  # Single worker for better control
+        thread = threading.Thread(target=worker, args=(account_queue, status_counter, processing_manager))
+        thread.daemon = True
+        thread.start()
+        threads.append(thread)
+    
+    # Wait for all accounts to be processed
+    account_queue.join()
+    
+    # Wait for all threads to complete
+    for thread in threads:
+        thread.join()
+    
+    log(f"\nProcessing complete. Successful: {status_counter.success}, Failed: {status_counter.failed}", Fore.GREEN)
 
 if __name__ == "__main__":
     main()
